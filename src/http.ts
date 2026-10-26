@@ -12,6 +12,10 @@ import {
   serveProtectedResourceMetadata,
 } from "./mcp-auth.js";
 import { createServer } from "./server.js";
+import {
+  TEST_CLIENT_DOC_PATH,
+  serveTestClientDocument,
+} from "./test-client-doc.js";
 
 /**
  * Streamable HTTP entrypoint.
@@ -65,6 +69,12 @@ export function buildApp(): express.Express {
   app.get(WELL_KNOWN_BASE, serveProtectedResourceMetadata);
   if (metadataSuffix !== WELL_KNOWN_BASE) {
     app.get(metadataSuffix, serveProtectedResourceMetadata);
+  }
+
+  // Test-only, off by default, and public because PingFederate fetches it
+  // unauthenticated. See src/test-client-doc.ts.
+  if (config.serveTestClientDoc) {
+    app.get(TEST_CLIENT_DOC_PATH, serveTestClientDocument);
   }
 
   // Before the body parser, deliberately: an unauthenticated caller should

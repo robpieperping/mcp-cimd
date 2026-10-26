@@ -78,6 +78,12 @@ spec:
             # read hides the six mutating FHIR tools outright (plan §6.2).
             - name: MCP_TOOLSET
               value: "read"
+            # Phase A's CIMD client document, served from this origin because
+            # a CIMD client_id *is* its document's URL and the PF host is not
+            # ours to write to. Test-only: drop this and the Ingress path once
+            # a real client exists. See src/test-client-doc.ts.
+            - name: SERVE_TEST_CLIENT_DOC
+              value: "true"
           envFrom:
             # PINGONE_ENV_ID, PINGONE_CLIENT_ID, PINGONE_CLIENT_SECRET,
             # FHIR_BASE_URL. The FHIR base URL is not a secret, but it
@@ -182,6 +188,14 @@ spec:
           # (/.well-known/oauth-protected-resource/mcp).
           - path: /.well-known/oauth-protected-resource
             pathType: Prefix
+            backend:
+              service:
+                name: mcp-cimd
+                port:
+                  number: 80
+          # Test-only, paired with SERVE_TEST_CLIENT_DOC on the Deployment.
+          - path: /mcp-test-client.json
+            pathType: Exact
             backend:
               service:
                 name: mcp-cimd

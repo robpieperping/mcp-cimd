@@ -144,6 +144,16 @@ export const config = {
     toolset: oneOf("MCP_TOOLSET", ["read", "all"] as const, "read"),
   },
   /**
+   * Serve Phase A's CIMD client metadata document from this origin. Off by
+   * default and test-only -- see src/test-client-doc.ts for why a resource
+   * server is hosting a client's document at all.
+   */
+  serveTestClientDoc: oneOf(
+    "SERVE_TEST_CLIENT_DOC",
+    ["true", "false"] as const,
+    "false",
+  ) === "true",
+  /**
    * Outbound: the service account this server uses to call FHIR. Optional,
    * and when it is absent the FHIR hop is anonymous -- see README, "The
    * upstream FHIR hop is unauthenticated".
