@@ -1,9 +1,13 @@
 # Deploying mcp-cimd
 
 Target: Ping SE DevOps cluster `ping-dev-aws-us-east-2`, namespace
-`ping-devops-robpieper`. The service has **no Ingress** — it is reachable
-only in-cluster at `http://mcp-cimd`, and from Phase 4 only
-PingGateway calls it.
+`ping-devops-robpieper`.
+
+This server is its own protected resource — it validates ChatGPT's token
+itself rather than sitting behind PingGateway (plan §3). It therefore
+needs to be publicly reachable, and the **Ingress on
+`mcp-cimd.ping-devops.com` is Phase C work**. Until then the manifest
+here is Deployment + Service only, reachable by port-forward.
 
 ## Cluster facts worth knowing
 
@@ -71,10 +75,15 @@ kubectl create secret generic mcp-cimd-secrets -n ping-devops-robpieper \
   --from-env-file=.env
 ```
 
-Carries `PINGONE_ENV_ID`, `PINGONE_CLIENT_ID`, `PINGONE_CLIENT_SECRET`,
-`FHIR_BASE_URL`. The FHIR base URL is not secret but lives here so there
-is one place to change it. The CI ServiceAccount deliberately cannot
-read this secret.
+Carries `FHIR_BASE_URL` and, if the upstream FHIR call is to be
+authenticated at all, `PINGONE_ENV_ID`, `PINGONE_CLIENT_ID` and
+`PINGONE_CLIENT_SECRET`. The FHIR base URL is not secret but lives here
+so there is one place to change it. The CI ServiceAccount deliberately
+cannot read this secret.
+
+The inbound OAuth settings (`MCP_RESOURCE`, `OAUTH_ISSUER`,
+`MCP_TOOLSET`) are **not** here: they are public identifiers and live in
+the Deployment's `env` block, where a change shows up in a diff.
 
 ### 3. Container image
 
@@ -111,8 +120,19 @@ kubectl port-forward -n ping-devops-robpieper deploy/mcp-cimd 3000:3000
 
 curl -s localhost:3000/healthz
 curl -s localhost:3000/readyz    # reports the FHIR server's advertised fhirVersion
-npx @modelcontextprotocol/inspector    # point at http://localhost:3000/mcp
+
+# Protected-resource metadata: unauthenticated by design.
+curl -s localhost:3000/.well-known/oauth-protected-resource | jq
+
+# And the challenge a client with no token gets. This must carry
+# resource_metadata, or ChatGPT has no way to discover PingFederate.
+curl -isS -X POST localhost:3000/mcp -H 'content-type: application/json' -d '{}' \
+  | grep -i www-authenticate
 ```
+
+The Inspector needs a token, so point it at the deployed URL once the
+Phase C Ingress exists rather than at a port-forward: it drives the whole
+OAuth flow, which cannot complete against `localhost`.
 
 ## Notes
 

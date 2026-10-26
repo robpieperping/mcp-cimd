@@ -14,17 +14,34 @@ interface CachedToken {
 }
 
 let cachedToken: CachedToken | null = null;
+let warnedUnconfigured = false;
 
 /**
- * Retrieves a valid access token using PingOne client_credentials flow
- * with client_secret_basic authentication (credentials in Authorization header).
- * Caches the token and refreshes it 30 seconds before expiry.
+ * Retrieves a valid access token for the UPSTREAM FHIR call, using the
+ * PingOne client_credentials flow with client_secret_basic authentication
+ * (credentials in the Authorization header). Caches the token and refreshes
+ * it 30 seconds before expiry.
  *
- * Returns null if the token cannot be obtained (e.g. PingOne app not configured
- * with client_credentials grant or missing scopes). In that case callers should
- * attempt the FHIR request without an Authorization header.
+ * Returns null when no token can be obtained -- either because PingOne is
+ * not configured at all, or because the token request failed. Callers then
+ * call FHIR without an Authorization header.
+ *
+ * This is NOT the token ChatGPT presents to us; that one is validated in
+ * src/mcp-auth.ts. The two are unrelated, and today there is no exchange
+ * between them: see README, "The upstream FHIR hop is unauthenticated".
  */
 export async function getAccessToken(): Promise<string | null> {
+  if (!config.pingone) {
+    if (!warnedUnconfigured) {
+      warnedUnconfigured = true;
+      console.error(
+        "[auth] PingOne is not configured; FHIR requests go out unauthenticated. " +
+          "Set PINGONE_ENV_ID, PINGONE_CLIENT_ID and PINGONE_CLIENT_SECRET to change that."
+      );
+    }
+    return null;
+  }
+
   const now = Date.now();
 
   if (cachedToken && cachedToken.expiresAt > now + 30_000) {

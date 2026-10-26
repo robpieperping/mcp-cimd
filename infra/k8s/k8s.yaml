@@ -12,11 +12,15 @@
 # cluster pulls anonymously. Making the package private again means
 # adding a docker-registry secret here and in the pod spec.
 #
-# There is deliberately NO Ingress here. This service is reachable only
-# from inside the cluster, at http://mcp-cimd, and only
-# PingGateway is meant to call it. An MCP server that is directly
-# reachable from the internet makes the whole gateway story theatre.
-# The public entrypoint arrives in Phase 4 as the gateway's own Ingress.
+# This server is its own OAuth 2.1 protected resource (plan §3): it
+# validates ChatGPT's bearer token itself rather than sitting behind
+# PingGateway. ChatGPT therefore has to reach it from the internet, and
+# the token validation in src/mcp-auth.ts is the only thing between the
+# internet and SmileCDR -- which is why MCP_AUTH defaults to "required"
+# and why the mutating tools are off by default.
+#
+# The Ingress on mcp-cimd.ping-devops.com is Phase C, not here. Until it
+# exists this is still a ClusterIP service, reachable by port-forward.
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -58,6 +62,22 @@ spec:
               value: "3000"
             - name: NODE_ENV
               value: "production"
+            # Inbound authorization. Not secrets -- all three are public
+            # identifiers, and MCP_RESOURCE is published in this server's
+            # own protected-resource metadata. They live here rather than
+            # in the Secret so a change is visible in a diff.
+            #
+            # MCP_RESOURCE must be byte-identical to the Audience Claim
+            # Value on the PingFederate access token manager and to the
+            # `resource` ChatGPT sends. A trailing slash here is a 401
+            # with no other symptom.
+            - name: MCP_RESOURCE
+              value: "https://mcp-cimd.ping-devops.com/mcp"
+            - name: OAUTH_ISSUER
+              value: "https://facile-pastrami-lipogram.ping-devops.com"
+            # read hides the six mutating FHIR tools outright (plan §6.2).
+            - name: MCP_TOOLSET
+              value: "read"
           envFrom:
             # PINGONE_ENV_ID, PINGONE_CLIENT_ID, PINGONE_CLIENT_SECRET,
             # FHIR_BASE_URL. The FHIR base URL is not a secret, but it

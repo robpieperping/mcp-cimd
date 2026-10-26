@@ -1,8 +1,9 @@
 # mcp-cimd image. Build from the repo root:
 #   docker build -f infra/Dockerfile -t mcp-cimd .
 #
-# The image defaults to MCP_TRANSPORT=http because that is the only mode a
-# gateway can proxy; stdio remains available by overriding the env var.
+# The image defaults to MCP_TRANSPORT=http: that is the transport ChatGPT
+# connects to, and the only one the authorization layer applies to. stdio
+# remains available by overriding the env var.
 FROM node:22-alpine AS builder
 WORKDIR /app
 COPY package.json package-lock.json ./

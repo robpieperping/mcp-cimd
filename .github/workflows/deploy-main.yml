@@ -44,8 +44,11 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      - name: Build
-        run: npm run build
+      # Builds, then runs the authorization suite against the real express
+      # app. A regression here means the server would serve FHIR data to an
+      # unaudienced token, so it gates the image rather than the deploy.
+      - name: Test
+        run: npm test
 
   build-and-push:
     runs-on: ubuntu-24.04-arm
