@@ -84,10 +84,20 @@ spec:
             # a real client exists. See src/test-client-doc.ts.
             - name: SERVE_TEST_CLIENT_DOC
               value: "true"
+            # Not a secret, and never was: the server logs it at startup and
+            # /readyz reports it. It sat in the namespace Secret, whose only
+            # key it was, which made every change to it an opaque edit to a
+            # Secret instead of a visible one in a diff.
+            #
+            # Kubernetes gives `env` precedence over `envFrom`, so this wins
+            # over the Secret's stale copy of the same key. That copy is now
+            # vestigial and can be dropped from the Secret.
+            - name: FHIR_BASE_URL
+              value: "https://uhgc-smilecdr.encore.pingidentity.com/fhir"
           envFrom:
-            # PINGONE_ENV_ID, PINGONE_CLIENT_ID, PINGONE_CLIENT_SECRET,
-            # FHIR_BASE_URL. The FHIR base URL is not a secret, but it
-            # lives here so there is exactly one place to change it.
+            # PINGONE_ENV_ID, PINGONE_CLIENT_ID, PINGONE_CLIENT_SECRET --
+            # the outbound service account, which genuinely is secret and is
+            # optional (absent means the FHIR hop is anonymous).
             - secretRef:
                 name: mcp-cimd-secrets
           # Both probes use /healthz, which never touches FHIR. /readyz

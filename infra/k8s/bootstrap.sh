@@ -134,31 +134,31 @@ fi
 
 # ── 3. Application secret ────────────────────────────────────────────────────
 
-step "Application Secret mcp-cimd-secrets"
+# The Secret is now optional. It held exactly one key, FHIR_BASE_URL, which
+# is not a secret -- the server logs it at startup and /readyz reports it.
+# That value moved to the Deployment's env block, where a change to it shows
+# up in a diff instead of being an opaque edit to a Secret. Kubernetes gives
+# `env` precedence over `envFrom`, so the Deployment's value wins over any
+# stale copy still in the Secret.
+#
+# What belongs here is PINGONE_*: the outbound service account, which
+# genuinely is secret, and which is optional -- without it the FHIR hop is
+# anonymous.
+step "Application Secret mcp-cimd-secrets (optional)"
 if kubectl get secret mcp-cimd-secrets -n "$NS" >/dev/null 2>&1; then
   keys=$(kubectl get secret mcp-cimd-secrets -n "$NS" -o jsonpath='{.data}' \
          | tr ',' '\n' | sed -n 's/.*"\([A-Z_]*\)":.*/\1/p' | tr '\n' ' ')
   have "exists, keys: ${keys:-unknown}"
   case "$keys" in
-    *FHIR_BASE_URL*) have "carries FHIR_BASE_URL" ;;
-    *)               need "FHIR_BASE_URL is not in the Secret" ;;
+    *PINGONE_*) have "carries PingOne credentials for the outbound FHIR hop" ;;
+    *)          warn "no PINGONE_* keys -- the FHIR hop is anonymous, which is fine" ;;
+  esac
+  case "$keys" in
+    *FHIR_BASE_URL*)
+      warn "FHIR_BASE_URL here is ignored: the Deployment's env wins. Safe to drop." ;;
   esac
 else
-  need "Secret mcp-cimd-secrets"
-  if [ "$APPLY" = yes ]; then
-    if [ -f "$ROOT/.env" ] && grep -q '^FHIR_BASE_URL=' "$ROOT/.env"; then
-      # Only the outbound settings belong here. MCP_RESOURCE, OAUTH_ISSUER
-      # and MCP_TOOLSET are public identifiers and live in the Deployment's
-      # env block, where a change shows up in a diff.
-      kubectl create secret generic mcp-cimd-secrets -n "$NS" \
-        $(grep -E '^(FHIR_BASE_URL|PINGONE_[A-Z_]+)=.' "$ROOT/.env" \
-          | sed 's/^/--from-literal=/') \
-        --dry-run=client -o yaml | kubectl apply -f -
-      did "created from .env (FHIR_BASE_URL and any PINGONE_* values)"
-    else
-      need "no FHIR_BASE_URL in $ROOT/.env -- copy .env.example and fill it in"
-    fi
-  fi
+  warn "no Secret, which is fine -- nothing required lives in it any more"
 fi
 
 # ── 4. Container image ───────────────────────────────────────────────────────
