@@ -4,10 +4,35 @@ Target: Ping SE DevOps cluster `ping-dev-aws-us-east-2`, namespace
 `ping-devops-robpieper`.
 
 This server is its own protected resource — it validates ChatGPT's token
-itself rather than sitting behind PingGateway (plan §3). It therefore
-needs to be publicly reachable, and the **Ingress on
-`mcp-cimd.ping-devops.com` is Phase C work**. Until then the manifest
-here is Deployment + Service only, reachable by port-forward.
+itself rather than sitting behind PingGateway (plan §3). It is therefore
+publicly reachable at `https://mcp-cimd.ping-devops.com`, and its own
+token validation is the only thing between the internet and SmileCDR.
+
+The Ingress routes **only** `/mcp` and
+`/.well-known/oauth-protected-resource`, not `/`. `/healthz` and
+`/readyz` are unauthenticated by design — a kubelet probe must not need
+a token, and the kubelet reaches the pod directly — but `/readyz`
+reports the FHIR server's base URL, which is not something to hand to
+the internet.
+
+## Two scripts do the work
+
+```bash
+./infra/k8s/bootstrap.sh            # report what is and is not set up
+./infra/k8s/bootstrap.sh --apply    # do the missing one-time pieces
+./infra/verify-deploy.sh            # check the deployment, no token needed
+./infra/verify-deploy.sh "$TOKEN"   # also drive a real MCP session
+```
+
+`bootstrap.sh` is idempotent and is the quickest way to confirm the
+setup is still intact. It needs an interactive kubectl session, because
+this cluster authenticates through an OIDC exec plugin that opens a
+browser. The ServiceAccount token it reads is written only to a mode-600
+temp file, verified against the cluster, handed to `gh secret set` over
+stdin, and deleted; it is never printed.
+
+The rest of this file is what those scripts automate, for when you need
+to do a step by hand or understand what it did.
 
 ## Cluster facts worth knowing
 
@@ -103,6 +128,19 @@ with `read:packages` and add `imagePullSecrets` back to the pod spec.
 ## Deploy
 
 Push to `main`; the workflow runs `check` → `build-and-push` → `deploy`.
+`check` now runs `npm test`, so a regression in token validation fails
+the image rather than the deploy.
+
+**Order matters on a fresh repo.** The GHCR package does not exist until
+the first `build-and-push`, and it inherits the repository's private
+visibility, so the sequence is: push once (the deploy job fails if the
+secrets are not set yet), flip the package public, run
+`bootstrap.sh --apply`, then re-run the workflow.
+
+```bash
+gh workflow run "Build And Deploy (main)"
+```
+
 Manually:
 
 ```bash
@@ -112,8 +150,19 @@ kubectl rollout status -n ping-devops-robpieper deploy/mcp-cimd
 
 ## Verify
 
-There is no public URL by design, so verification goes through a
-port-forward:
+`./infra/verify-deploy.sh` is the Phase C exit criterion as a pass/fail
+report: DNS, the wildcard certificate and whether it covers the host,
+the metadata document and whether the `resource` it advertises matches
+the URL actually serving it, the 401 challenge and whether the
+`resource_metadata` URL it names resolves, the authorization server's
+own discovery document and whether its `issuer` matches exactly, and
+that `/healthz` and `/readyz` are *not* internet-reachable.
+
+A stale `MCP_RESOURCE` in the Deployment env is the failure worth
+naming: downstream it is a flat 401 with no other clue, so the script
+compares the advertised resource against the host it asked.
+
+By port-forward, for the endpoints the Ingress does not expose:
 
 ```bash
 kubectl port-forward -n ping-devops-robpieper deploy/mcp-cimd 3000:3000

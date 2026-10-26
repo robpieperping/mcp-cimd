@@ -267,3 +267,5 @@ same answer.
 | Phase A findings and PF runbook | `~/mywork/MCP-CIMD/phase-a/README.md` |
 | CIMD documents | `~/mywork/MCP-CIMD/cimd/README.md` |
 | Deployment | `infra/k8s/README.md` |
+| One-time cluster + CI setup | `./infra/k8s/bootstrap.sh` |
+| Check a deployment | `./infra/verify-deploy.sh` |

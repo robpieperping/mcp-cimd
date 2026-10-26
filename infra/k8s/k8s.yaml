@@ -136,3 +136,54 @@ spec:
     - name: http
       port: 80
       targetPort: http
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mcp-cimd
+  annotations:
+    # MCP's GET /mcp is an SSE stream. nginx buffers proxied responses by
+    # default, which holds events until the buffer fills and makes the
+    # stream look dead; the long timeouts stop it cutting an idle stream.
+    # Learned the hard way in Phase 4 of the earlier program.
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    # express accepts a 4mb JSON body (src/http.ts). nginx's default cap is
+    # 1m, so without this a large transaction Bundle is rejected at the
+    # ingress with a 413 that never reaches the server's own limit.
+    nginx.ingress.kubernetes.io/proxy-body-size: "4m"
+spec:
+  ingressClassName: nginx-public
+  # No secretName: hosts under ping-devops.com automatically get the
+  # cluster's wildcard Let's Encrypt certificate.
+  tls:
+    - hosts:
+        - mcp-cimd.ping-devops.com
+  rules:
+    - host: mcp-cimd.ping-devops.com
+      http:
+        # Only what a client needs, rather than the usual path: / .
+        #
+        # /healthz and /readyz are deliberately NOT routed. They are
+        # unauthenticated by design, because kubelet probes must not need a
+        # token -- and the kubelet reaches the pod directly, so it does not
+        # need the Ingress. /readyz in particular reports the FHIR server's
+        # base URL, which is not something to hand to the internet.
+        paths:
+          - path: /mcp
+            pathType: Prefix
+            backend:
+              service:
+                name: mcp-cimd
+                port:
+                  number: 80
+          # Covers both the bare path and the RFC 9728 path-suffixed form
+          # (/.well-known/oauth-protected-resource/mcp).
+          - path: /.well-known/oauth-protected-resource
+            pathType: Prefix
+            backend:
+              service:
+                name: mcp-cimd
+                port:
+                  number: 80
