@@ -169,6 +169,9 @@ pkg=$(printf '%s' "$raw" | python3 -c "import json,sys
 try: print(json.load(sys.stdin).get('visibility',''))
 except Exception: pass" 2>/dev/null)
 case "$pkg" in public|private|internal) ;; *) pkg="" ;; esac
+pkg_url=$(printf '%s' "$raw" | python3 -c "import json,sys
+try: print(json.load(sys.stdin).get('html_url',''))
+except Exception: pass" 2>/dev/null)
 
 if printf '%s' "$raw" | grep -q 'read:packages scope'; then
   # The default gh token does not carry it, and without it neither the
@@ -184,9 +187,12 @@ else
   # first deploy with ImagePullBackOff. This bit all three repos in this
   # program.
   need "package is $pkg; make it public or the deploy fails ImagePullBackOff"
-  warn "gh api -X PATCH user/packages/container/mcp-cimd -f visibility=public"
-  warn "(needs: gh auth refresh -h github.com -s write:packages)"
-  warn "or: Package settings -> Danger Zone -> Change visibility -> Public"
+  # There is no API for this. The packages REST API exposes only GET, DELETE
+  # and restore -- no PATCH, and no visibility field to write. A PATCH returns
+  # a route-level 404, which reads like a missing package and is not one.
+  # The web UI is the only way.
+  warn "${pkg_url:-https://github.com/$REPO/pkgs/container/mcp-cimd}"
+  warn "  -> Package settings -> Danger Zone -> Change visibility -> Public"
 fi
 
 # ── Report ───────────────────────────────────────────────────────────────────
