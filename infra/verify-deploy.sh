@@ -48,10 +48,34 @@ else
   no "DNS resolves" "no A/CNAME record for $HOST"
 fi
 
+# dig queries the nameservers directly; curl goes through the system resolver,
+# which caches negative answers. Right after a host is first published those
+# two disagree, and every check below then fails with a connection error that
+# looks exactly like a broken deployment. When the record demonstrably exists
+# but curl cannot see it, pin curl to the address dig returned and say so,
+# rather than reporting ten false failures.
+# The test is empirical rather than clever: a connection that fails by name
+# but succeeds against the very address dig just returned is a resolver
+# problem and nothing else. Any other combination is left alone, for the real
+# checks below to report.
+RESOLVE=()
+if [ -n "$addr" ]; then
+  reach() { command curl -sS --max-time 10 -o /dev/null "$@" "https://$HOST/" 2>/dev/null; }
+  if ! reach && reach --resolve "$HOST:443:$addr"; then
+    RESOLVE=(--resolve "$HOST:443:$addr")
+    note "system resolver is stale" "pinned curl to $addr -- negative cache, not a fault"
+  fi
+fi
+CURL=(curl -sS "${RESOLVE[@]}")
+
 # The wildcard certificate is the thing most likely to be silently wrong: a
 # host outside *.ping-devops.com gets no cert at all, and ChatGPT will not
 # talk to a server it cannot verify.
-cert=$(echo | openssl s_client -servername "$HOST" -connect "$HOST:443" 2>/dev/null \
+# openssl resolves the same way curl does, so it needs the same pin. SNI
+# still carries the real hostname, which is what selects the certificate.
+tls_target="$HOST"
+[ ${#RESOLVE[@]} -gt 0 ] && tls_target="$addr"
+cert=$(echo | openssl s_client -servername "$HOST" -connect "$tls_target:443" 2>/dev/null \
        | openssl x509 -noout -subject -issuer -dates -ext subjectAltName 2>/dev/null)
 if [ -n "$cert" ]; then
   subject=$(printf '%s' "$cert" | sed -n 's/^subject=//p')
@@ -70,10 +94,10 @@ fi
 
 # ── Protected resource metadata: the Phase C exit ────────────────────────────
 
-meta_body=$(curl -sS --max-time 15 "https://$HOST/.well-known/oauth-protected-resource" 2>/dev/null)
-meta_code=$(curl -sS --max-time 15 -o /dev/null -w '%{http_code}' \
+meta_body=$("${CURL[@]}" --max-time 15 "https://$HOST/.well-known/oauth-protected-resource" 2>/dev/null)
+meta_code=$("${CURL[@]}" --max-time 15 -o /dev/null -w '%{http_code}' \
             "https://$HOST/.well-known/oauth-protected-resource" 2>/dev/null)
-meta_type=$(curl -sS --max-time 15 -o /dev/null -w '%{content_type}' \
+meta_type=$("${CURL[@]}" --max-time 15 -o /dev/null -w '%{content_type}' \
             "https://$HOST/.well-known/oauth-protected-resource" 2>/dev/null)
 
 if [ "$meta_code" = "200" ]; then
@@ -110,7 +134,7 @@ else
 fi
 
 # RFC 9728 §3.1 puts the resource's path after the well-known segment.
-suffixed=$(curl -sS --max-time 15 -o /dev/null -w '%{http_code}' \
+suffixed=$("${CURL[@]}" --max-time 15 -o /dev/null -w '%{http_code}' \
            "https://$HOST/.well-known/oauth-protected-resource/mcp" 2>/dev/null)
 if [ "$suffixed" = "200" ]; then
   ok "metadata at the path-suffixed location too" ""
@@ -120,7 +144,7 @@ fi
 
 # ── The challenge, and whether it is actionable ───────────────────────────────
 
-challenge=$(curl -sS --max-time 15 -i -X POST "https://$HOST/mcp" \
+challenge=$("${CURL[@]}" --max-time 15 -i -X POST "https://$HOST/mcp" \
             -H 'content-type: application/json' -d '{}' 2>/dev/null)
 status=$(printf '%s' "$challenge" | head -1 | tr -d '\r')
 header=$(printf '%s' "$challenge" | grep -i '^www-authenticate:' | tr -d '\r')
@@ -137,7 +161,7 @@ if [ -n "$header" ]; then
     ok "challenge carries resource_metadata" "$rm_url"
     # This is how ChatGPT discovers PingFederate. A URL that does not
     # resolve is the whole flow dead at step one.
-    rm_code=$(curl -sS --max-time 15 -o /dev/null -w '%{http_code}' "$rm_url" 2>/dev/null)
+    rm_code=$("${CURL[@]}" --max-time 15 -o /dev/null -w '%{http_code}' "$rm_url" 2>/dev/null)
     if [ "$rm_code" = "200" ]; then
       ok "the advertised metadata URL resolves" ""
     else
@@ -153,7 +177,7 @@ fi
 # A garbage bearer must be refused as invalid_token, which also proves the
 # pod can reach the key set -- a pod that cannot would fail the same way, so
 # check the server log if this one is the only failure.
-bad=$(curl -sS --max-time 20 -i -X POST "https://$HOST/mcp" \
+bad=$("${CURL[@]}" --max-time 20 -i -X POST "https://$HOST/mcp" \
       -H 'content-type: application/json' -H 'authorization: Bearer not.a.jwt' \
       -d '{}' 2>/dev/null | grep -i '^www-authenticate:' | tr -d '\r')
 case "$bad" in
@@ -174,7 +198,7 @@ if [ -n "$as" ] || [ -n "$OAUTH_METADATA_URL" ]; then
   # Without our own metadata there is nothing to compare the issuer to, so
   # derive the expected value from the discovery URL itself.
   [ -z "$as" ] && as="${metadata_url%/.well-known/*}"
-  body=$(curl -sS --max-time 15 "$metadata_url" 2>/dev/null)
+  body=$("${CURL[@]}" --max-time 15 "$metadata_url" 2>/dev/null)
   iss=$(printf '%s' "$body" | jqish issuer 2>/dev/null)
 
   if [ -n "$iss" ]; then
@@ -207,7 +231,7 @@ if [ -n "$as" ] || [ -n "$OAUTH_METADATA_URL" ]; then
 
   # Informational only. MCP clients must support either mechanism, and this
   # instance serves OIDC discovery, so a 403 here is not a failure.
-  rfc8414=$(curl -sS --max-time 15 -o /dev/null -w '%{http_code}' \
+  rfc8414=$("${CURL[@]}" --max-time 15 -o /dev/null -w '%{http_code}' \
             "$as/.well-known/oauth-authorization-server" 2>/dev/null)
   if [ "$rfc8414" = "200" ]; then
     note "RFC 8414 metadata" "also served"
@@ -219,7 +243,7 @@ fi
 # ── What must NOT be public ──────────────────────────────────────────────────
 
 for path in healthz readyz; do
-  code=$(curl -sS --max-time 15 -o /dev/null -w '%{http_code}' "https://$HOST/$path" 2>/dev/null)
+  code=$("${CURL[@]}" --max-time 15 -o /dev/null -w '%{http_code}' "https://$HOST/$path" 2>/dev/null)
   case "$code" in
     200)
       # /readyz reports the FHIR base URL. The Ingress routes only /mcp and
@@ -238,7 +262,7 @@ done
 
 if [ -n "$TOKEN" ]; then
   echo
-  init=$(curl -sS --max-time 30 -i -X POST "https://$HOST/mcp" \
+  init=$("${CURL[@]}" --max-time 30 -i -X POST "https://$HOST/mcp" \
     -H 'content-type: application/json' \
     -H 'accept: application/json, text/event-stream' \
     -H "authorization: Bearer $TOKEN" \
@@ -246,7 +270,7 @@ if [ -n "$TOKEN" ]; then
   sid=$(printf '%s' "$init" | grep -i '^mcp-session-id:' | tr -d '\r' | awk '{print $2}')
   if [ -n "$sid" ]; then
     ok "the token opens an MCP session" "$sid"
-    list=$(curl -sS --max-time 30 -X POST "https://$HOST/mcp" \
+    list=$("${CURL[@]}" --max-time 30 -X POST "https://$HOST/mcp" \
       -H 'content-type: application/json' \
       -H 'accept: application/json, text/event-stream' \
       -H "authorization: Bearer $TOKEN" -H "mcp-session-id: $sid" \
@@ -261,7 +285,7 @@ except Exception: print(0)" 2>/dev/null)
     else
       no "tools/list over the public URL" "returned no tools"
     fi
-    curl -sS --max-time 15 -o /dev/null -X DELETE "https://$HOST/mcp" \
+    "${CURL[@]}" --max-time 15 -o /dev/null -X DELETE "https://$HOST/mcp" \
       -H "authorization: Bearer $TOKEN" -H "mcp-session-id: $sid" 2>/dev/null
   else
     no "the token opens an MCP session" "no Mcp-Session-Id; check aud and scope"
