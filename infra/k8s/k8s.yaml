@@ -204,12 +204,27 @@ spec:
                 port:
                   number: 80
           # Test-only, paired with SERVE_TEST_CLIENT_DOC on the Deployment.
-          # Prefix, not Exact, so a suffixed path works: PF caches a client
-          # document by client_id and ignores our Cache-Control, so changing
-          # the document means serving it at a new URL to force a refetch.
-          # The handler validates the path shape and 404s anything else.
-          - path: /mcp-test-client
-            pathType: Prefix
+          #
+          # One Exact entry per document URL. PF caches a client document by
+          # client_id and ignores our Cache-Control, so changing the document
+          # means serving it at a new URL; add a line here when bumping the
+          # suffix in phase-a/env.sh.
+          #
+          # NOT `pathType: Prefix` on /mcp-test-client -- Ingress prefix
+          # matching is element-wise, so that matches /mcp-test-client and
+          # /mcp-test-client/... but never /mcp-test-client.json, and the
+          # request 404s at nginx before reaching the server. Nor use-regex,
+          # which would reinterpret /mcp and the well-known paths in this
+          # same Ingress as regexes.
+          - path: /mcp-test-client.json
+            pathType: Exact
+            backend:
+              service:
+                name: mcp-cimd
+                port:
+                  number: 80
+          - path: /mcp-test-client-v2.json
+            pathType: Exact
             backend:
               service:
                 name: mcp-cimd
