@@ -205,10 +205,11 @@ spec:
                   number: 80
           # Test-only, paired with SERVE_TEST_CLIENT_DOC on the Deployment.
           #
-          # One Exact entry per document URL. PF caches a client document by
-          # client_id and ignores our Cache-Control, so changing the document
-          # means serving it at a new URL; add a line here when bumping the
-          # suffix in phase-a/env.sh.
+          # One Exact entry per document URL. PF registers a client document
+          # permanently, keyed by client_id, and never re-reads it -- not a
+          # cache, so waiting does not help. Changing a document means serving
+          # it at a new URL; add a line here when bumping the suffix in
+          # phase-a/env.sh.
           #
           # NOT `pathType: Prefix` on /mcp-test-client -- Ingress prefix
           # matching is element-wise, so that matches /mcp-test-client and
@@ -224,6 +225,25 @@ spec:
                 port:
                   number: 80
           - path: /mcp-test-client-v2.json
+            pathType: Exact
+            backend:
+              service:
+                name: mcp-cimd
+                port:
+                  number: 80
+          # The private_key_jwt variant, and the keys PF fetches for it.
+          # Used to measure PF 13.1's client-assertion rules with a key we
+          # hold -- see MCP-CIMD/cimd/probe-client-auth.sh.
+          - path: /mcp-test-client-jwt.json
+            pathType: Exact
+            backend:
+              service:
+                name: mcp-cimd
+                port:
+                  number: 80
+          # Spelled with a dot, not /mcp-test-client-jwks.json, so it cannot
+          # collide with the document route's generic `-suffix` pattern.
+          - path: /mcp-test-client.jwks.json
             pathType: Exact
             backend:
               service:

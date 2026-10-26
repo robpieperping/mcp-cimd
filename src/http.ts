@@ -15,8 +15,10 @@ import { createServer } from "./server.js";
 import {
   TEST_CALLBACK_PATH,
   TEST_CLIENT_DOC_PATH,
+  TEST_CLIENT_JWKS_PATH,
   serveTestCallback,
   serveTestClientDocument,
+  serveTestClientJwks,
 } from "./test-client-doc.js";
 
 /**
@@ -76,9 +78,17 @@ export function buildApp(): express.Express {
   // Test-only, off by default, and public because PingFederate fetches it
   // unauthenticated. See src/test-client-doc.ts.
   if (config.serveTestClientDoc) {
-    // Any /mcp-test-client[-suffix].json; the handler validates the shape
-    // and refuses anything else. The suffix exists to miss PF's cache.
-    app.get(/^\/mcp-test-client(-[a-z0-9]{1,16})?\.json$/, serveTestClientDocument);
+    // Before the document route: TEST_CLIENT_JWKS_PATH is spelled so it
+    // cannot match the document pattern, and registering it first keeps that
+    // true even if the pattern is widened later.
+    app.get(TEST_CLIENT_JWKS_PATH, serveTestClientJwks);
+    // Any /mcp-test-client[-jwt][-suffix].json; the handler validates the
+    // shape and refuses anything else. A suffixed path is a distinct client
+    // to PF, which is the only way to revise a document PF has registered.
+    app.get(
+      /^\/mcp-test-client(-jwt)?(-[a-z0-9]{1,16})?\.json$/,
+      serveTestClientDocument,
+    );
     app.get(TEST_CALLBACK_PATH, serveTestCallback);
   }
 
