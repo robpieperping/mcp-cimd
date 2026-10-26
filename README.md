@@ -127,14 +127,15 @@ express app over real HTTP, because a PingFederate-signed token cannot be
 minted without PingFederate's private key. Everything on this server's side
 of the boundary is the code that runs in production.
 
-28 checks, including: an opaque reference token, a token signed by an
+31 checks, including: an opaque reference token, a token signed by an
 unpublished key, `alg=none`, an HMAC-signed token (the JWKS confusion
 attack), another issuer, a missing `aud`, another resource's `aud`, expired,
 not-yet-valid, no `exp`, a tampered payload, a valid token with the wrong
 scope, RS256 and ES256 happy paths, the `securitySchemes` on every listed
 tool, the mutating tools' absence under `MCP_TOOLSET=read`, one subject
 trying to drive another's session, and that the key set is cached rather
-than fetched per request.
+than fetched per request, and that a brief authorization-server outage
+is served from the cached key set rather than becoming an outage here.
 
 ## HTTP routes
 

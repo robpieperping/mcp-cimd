@@ -11,7 +11,7 @@
     "dev:http": "MCP_TRANSPORT=http ts-node src/index.ts",
     "typecheck": "tsc --noEmit",
     "watch": "tsc --watch",
-    "test": "npm run build && node --test test/auth.test.mjs"
+    "test": "npm run build && node --test test/auth.test.mjs test/jwks-resilience.test.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

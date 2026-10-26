@@ -78,13 +78,33 @@ async function fetchJwks(): Promise<CacheEntry> {
   return { keys: keys as JwkEntry[], fetchedAt: Date.now() };
 }
 
-/** Coalesces concurrent refreshes, so a burst of requests makes one fetch. */
+/**
+ * Coalesces concurrent refreshes, so a burst of requests makes one fetch.
+ *
+ * A failed refresh falls back to whatever is cached rather than propagating.
+ * Signing keys change on the order of months, so a key set a few minutes
+ * past its TTL is almost certainly still correct -- whereas refusing every
+ * request because the authorization server is briefly unreachable turns an
+ * AS blip into an outage of this server. The failure is logged, and a token
+ * signed by a key the stale set does not contain is still refused.
+ */
 function refresh(): Promise<CacheEntry> {
   if (inFlight) return inFlight;
   inFlight = fetchJwks()
     .then((entry) => {
       cache = entry;
       return entry;
+    })
+    .catch((error: unknown) => {
+      if (cache) {
+        const age = Math.round((Date.now() - cache.fetchedAt) / 1000);
+        console.error(
+          `[jwks] refresh failed, serving the cached key set (${age}s old): ` +
+            `${error instanceof Error ? error.message : String(error)}`
+        );
+        return cache;
+      }
+      throw error;
     })
     .finally(() => {
       inFlight = null;
