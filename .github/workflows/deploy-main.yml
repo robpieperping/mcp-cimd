@@ -19,7 +19,12 @@ env:
   # GITHUB_TOKEN. github.repository is already lowercase, which GHCR
   # requires.
   IMAGE: ghcr.io/${{ github.repository }}
-  K8S_NAMESPACE: ${{ secrets.K8S_NAMESPACE }}
+  # Not a secret: it is a namespace name, and it already appears in
+  # infra/k8s/README.md, infra/k8s/bootstrap.sh and the manifest's own
+  # comments. Storing it as one bought nothing and added a setup step whose
+  # omission failed the deploy. The secret still wins if it is set, so the
+  # sibling repos' convention keeps working.
+  K8S_NAMESPACE: ${{ secrets.K8S_NAMESPACE || 'ping-devops-robpieper' }}
   K8S_DEPLOYMENT: mcp-cimd
   K8S_CONTAINER: mcp
 
@@ -103,13 +108,12 @@ jobs:
       # that says nothing about the actual cause.
       - name: Check deploy secrets are present
         run: |
-          missing=
-          [ -n "${{ secrets.K8S_NAMESPACE }}" ] || missing="$missing K8S_NAMESPACE"
-          [ -n "${{ secrets.KUBE_CONFIG_B64 }}" ] || missing="$missing KUBE_CONFIG_B64"
-          if [ -n "$missing" ]; then
-            echo "::error::Missing repository secret(s):$missing. Run ./infra/k8s/bootstrap.sh --apply"
-            exit 1
-          fi
+          [ -n "$K8S_NAMESPACE" ] || {
+            echo "::error::K8S_NAMESPACE resolved empty."; exit 1; }
+          [ -n "${{ secrets.KUBE_CONFIG_B64 }}" ] || {
+            echo "::error::Missing repository secret KUBE_CONFIG_B64 -- the only one this deploy needs. Run ./infra/k8s/bootstrap.sh --apply"
+            exit 1; }
+          echo "Deploying to namespace $K8S_NAMESPACE"
 
       - name: Install kubectl
         uses: azure/setup-kubectl@v4

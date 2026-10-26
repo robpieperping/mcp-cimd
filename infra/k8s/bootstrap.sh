@@ -80,19 +80,21 @@ fi
 
 step "GitHub Actions secrets"
 existing=$(gh secret list --repo "$REPO" 2>/dev/null | awk '{print $1}')
-for name in K8S_NAMESPACE KUBE_CONFIG_B64; do
-  if printf '%s\n' "$existing" | grep -qx "$name"; then
-    have "$name is set"
-  else
-    need "$name"
-  fi
-done
+
+# KUBE_CONFIG_B64 is the only secret the deploy needs. The workflow defaults
+# the namespace in its env block, since a namespace name is not a credential.
+if printf '%s\n' "$existing" | grep -qx KUBE_CONFIG_B64; then
+  have "KUBE_CONFIG_B64 is set"
+else
+  need "KUBE_CONFIG_B64 -- the only secret the deploy needs"
+fi
+if printf '%s\n' "$existing" | grep -qx K8S_NAMESPACE; then
+  have "K8S_NAMESPACE is set (optional; overrides the workflow default)"
+else
+  warn "K8S_NAMESPACE not set -- the workflow defaults to $NS, which is fine"
+fi
 
 if [ "$APPLY" = yes ]; then
-  if ! printf '%s\n' "$existing" | grep -qx K8S_NAMESPACE; then
-    printf '%s' "$NS" | gh secret set K8S_NAMESPACE --repo "$REPO" --body-file -
-    did "set K8S_NAMESPACE"
-  fi
   if ! printf '%s\n' "$existing" | grep -qx KUBE_CONFIG_B64; then
     # Built from the ServiceAccount token, NOT from the human kubeconfig:
     # the OIDC exec plugin needs a browser and cannot work in Actions.
