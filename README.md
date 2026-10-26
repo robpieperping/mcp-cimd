@@ -1,4 +1,4 @@
-# bxhealth-fhir-mcp
+# mcp-cimd
 
 MCP server exposing tools for a FHIR R4 server, authenticated against PingOne
 via the OAuth 2.0 client_credentials flow.
@@ -82,8 +82,8 @@ npx @modelcontextprotocol/inspector
 ## Container
 
 ```bash
-docker build -f infra/Dockerfile -t bxhealth-fhir-mcp .
-docker run --rm -p 3000:3000 --env-file .env bxhealth-fhir-mcp
+docker build -f infra/Dockerfile -t mcp-cimd .
+docker run --rm -p 3000:3000 --env-file .env mcp-cimd
 ```
 
 The image defaults to `MCP_TRANSPORT=http` and runs as the non-root `node`
@@ -96,9 +96,9 @@ user.
 ```json
 {
   "mcpServers": {
-    "bxhealth-fhir-mcp": {
+    "mcp-cimd": {
       "command": "node",
-      "args": ["/absolute/path/to/bxhealth-fhir-mcp/dist/index.js"]
+      "args": ["/absolute/path/to/mcp-cimd/dist/index.js"]
     }
   }
 }

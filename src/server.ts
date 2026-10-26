@@ -7,7 +7,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { tools } from "./tools.js";
 
-export const SERVER_NAME = "bxhealth-fhir-mcp";
+export const SERVER_NAME = "mcp-cimd";
 export const SERVER_VERSION = "1.0.0";
 
 /**

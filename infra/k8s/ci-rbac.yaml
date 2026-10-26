@@ -1,4 +1,4 @@
-# CI deploy identity for bxhealth-fhir-mcp.
+# CI deploy identity for mcp-cimd.
 #
 # Why this exists: the human kubeconfig for this cluster authenticates
 # through an interactive OIDC exec plugin (pingone-gte-oidc). Base64ing
@@ -31,7 +31,7 @@ type: kubernetes.io/service-account-token
 ---
 # Exactly what the deploy job does and nothing more: apply the manifest,
 # set the image, and watch the rollout. Deliberately no secrets access --
-# CI never needs to read bxhealth-fhir-mcp-secrets.
+# CI never needs to read mcp-cimd-secrets.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:

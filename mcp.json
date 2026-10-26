@@ -1,8 +1,8 @@
 {
   "mcpServers": {
-    "bxhealth-fhir-mcp": {
+    "mcp-cimd": {
       "command": "node",
-      "args": ["/Users/robpieper/mywork/bxhealth-fhir-mcp/dist/index.js"]
+      "args": ["/Users/robpieper/mywork/mcp-cimd-server/dist/index.js"]
     }
   }
 }

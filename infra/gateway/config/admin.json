@@ -1,9 +1,0 @@
-{
-  "mode": "PRODUCTION",
-  "streamingEnabled": true,
-  "connectors": [
-    {
-      "port": 8080
-    }
-  ]
-}

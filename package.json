@@ -1,5 +1,5 @@
 {
-  "name": "bxhealth-fhir-mcp",
+  "name": "mcp-cimd",
   "version": "1.0.0",
   "description": "MCP server providing tools to access a FHIR R4 server, deployable behind PingGateway",
   "main": "dist/index.js",

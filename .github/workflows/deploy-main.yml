@@ -20,7 +20,7 @@ env:
   # requires.
   IMAGE: ghcr.io/${{ github.repository }}
   K8S_NAMESPACE: ${{ secrets.K8S_NAMESPACE }}
-  K8S_DEPLOYMENT: bxhealth-fhir-mcp
+  K8S_DEPLOYMENT: mcp-cimd
   K8S_CONTAINER: mcp
 
 jobs:

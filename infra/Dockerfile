@@ -1,5 +1,5 @@
-# bxhealth-fhir-mcp image. Build from the repo root:
-#   docker build -f infra/Dockerfile -t bxhealth-fhir-mcp .
+# mcp-cimd image. Build from the repo root:
+#   docker build -f infra/Dockerfile -t mcp-cimd .
 #
 # The image defaults to MCP_TRANSPORT=http because that is the only mode a
 # gateway can proxy; stdio remains available by overriding the env var.

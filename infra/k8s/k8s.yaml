@@ -1,4 +1,4 @@
-# bxhealth-fhir-mcp on the Ping SE DevOps cluster.
+# mcp-cimd on the Ping SE DevOps cluster.
 #
 # Namespace is NOT hardcoded: select it first with
 #   kubens ping-devops-robpieper
@@ -6,14 +6,14 @@
 #   kubectl apply -f infra/k8s/k8s.yaml
 #
 # Prerequisites (created once, imperatively; see infra/k8s/README.md):
-#   kubectl create secret generic bxhealth-fhir-mcp-secrets ...
+#   kubectl create secret generic mcp-cimd-secrets ...
 #
 # There is no imagePullSecret: the GHCR package is public, so the
 # cluster pulls anonymously. Making the package private again means
 # adding a docker-registry secret here and in the pod spec.
 #
 # There is deliberately NO Ingress here. This service is reachable only
-# from inside the cluster, at http://bxhealth-fhir-mcp, and only
+# from inside the cluster, at http://mcp-cimd, and only
 # PingGateway is meant to call it. An MCP server that is directly
 # reachable from the internet makes the whole gateway story theatre.
 # The public entrypoint arrives in Phase 4 as the gateway's own Ingress.
@@ -21,9 +21,9 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: bxhealth-fhir-mcp
+  name: mcp-cimd
   labels:
-    app: bxhealth-fhir-mcp
+    app: mcp-cimd
 spec:
   # MCP sessions live in memory, keyed by Mcp-Session-Id (see src/http.ts).
   # A second pod would answer follow-up requests for sessions it never saw,
@@ -35,18 +35,18 @@ spec:
     type: Recreate
   selector:
     matchLabels:
-      app: bxhealth-fhir-mcp
+      app: mcp-cimd
   template:
     metadata:
       labels:
-        app: bxhealth-fhir-mcp
+        app: mcp-cimd
     spec:
       containers:
         - name: mcp
           # Tracks latest so a rollout restart ships updates without a
           # manifest edit; CI also pushes a git-sha tag for rollback and
           # sets the deployment to that sha on every deploy.
-          image: ghcr.io/robpieperping/bxhealth-fhir-mcp:latest
+          image: ghcr.io/robpieperping/mcp-cimd:latest
           imagePullPolicy: Always
           ports:
             - name: http
@@ -63,7 +63,7 @@ spec:
             # FHIR_BASE_URL. The FHIR base URL is not a secret, but it
             # lives here so there is exactly one place to change it.
             - secretRef:
-                name: bxhealth-fhir-mcp-secrets
+                name: mcp-cimd-secrets
           # Both probes use /healthz, which never touches FHIR. /readyz
           # DOES call the FHIR server and is the better-looking readiness
           # probe, but wiring it here would pull the pod out of the
@@ -107,11 +107,11 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: bxhealth-fhir-mcp
+  name: mcp-cimd
 spec:
   type: ClusterIP
   selector:
-    app: bxhealth-fhir-mcp
+    app: mcp-cimd
   ports:
     - name: http
       port: 80

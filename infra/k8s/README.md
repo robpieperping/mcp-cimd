@@ -1,8 +1,8 @@
-# Deploying bxhealth-fhir-mcp
+# Deploying mcp-cimd
 
 Target: Ping SE DevOps cluster `ping-dev-aws-us-east-2`, namespace
 `ping-devops-robpieper`. The service has **no Ingress** — it is reachable
-only in-cluster at `http://bxhealth-fhir-mcp`, and from Phase 4 only
+only in-cluster at `http://mcp-cimd`, and from Phase 4 only
 PingGateway calls it.
 
 ## Cluster facts worth knowing
@@ -67,7 +67,7 @@ KUBECONFIG=ci-kubeconfig.yaml kubectl auth can-i get secrets -n $NS             
 ### 2. Application secret
 
 ```bash
-kubectl create secret generic bxhealth-fhir-mcp-secrets -n ping-devops-robpieper \
+kubectl create secret generic mcp-cimd-secrets -n ping-devops-robpieper \
   --from-env-file=.env
 ```
 
@@ -78,7 +78,7 @@ read this secret.
 
 ### 3. Container image
 
-CI pushes `ghcr.io/robpieperping/bxhealth-fhir-mcp` using the workflow's
+CI pushes `ghcr.io/robpieperping/mcp-cimd` using the workflow's
 own `GITHUB_TOKEN`; no registry secret is needed.
 
 **The package must be public**, because the manifest carries no
@@ -98,7 +98,7 @@ Manually:
 
 ```bash
 kubectl apply -n ping-devops-robpieper -f infra/k8s/k8s.yaml
-kubectl rollout status -n ping-devops-robpieper deploy/bxhealth-fhir-mcp
+kubectl rollout status -n ping-devops-robpieper deploy/mcp-cimd
 ```
 
 ## Verify
@@ -107,7 +107,7 @@ There is no public URL by design, so verification goes through a
 port-forward:
 
 ```bash
-kubectl port-forward -n ping-devops-robpieper deploy/bxhealth-fhir-mcp 3000:3000
+kubectl port-forward -n ping-devops-robpieper deploy/mcp-cimd 3000:3000
 
 curl -s localhost:3000/healthz
 curl -s localhost:3000/readyz    # reports the FHIR server's advertised fhirVersion
