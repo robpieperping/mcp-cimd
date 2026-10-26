@@ -133,9 +133,9 @@ attack), another issuer, a missing `aud`, another resource's `aud`, expired,
 not-yet-valid, no `exp`, a tampered payload, a valid token with the wrong
 scope, RS256 and ES256 happy paths, the `securitySchemes` on every listed
 tool, the mutating tools' absence under `MCP_TOOLSET=read`, one subject
-trying to drive another's session, and that the key set is cached rather
-than fetched per request, and that a brief authorization-server outage
-is served from the cached key set rather than becoming an outage here.
+trying to drive another's session, that the key set is cached rather than
+fetched per request, and that a brief authorization-server outage is
+served from the cached key set rather than becoming an outage here.
 
 ## HTTP routes
 
