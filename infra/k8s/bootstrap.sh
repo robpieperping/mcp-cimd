@@ -162,10 +162,18 @@ fi
 # ── 4. Container image ───────────────────────────────────────────────────────
 
 step "GHCR package"
-pkg=$(gh api "user/packages/container/mcp-cimd" --jq .visibility 2>/dev/null)
-# gh prints its error body on stdout, so a 404 would otherwise land in $pkg.
+raw=$(gh api "user/packages/container/mcp-cimd" 2>&1)
+pkg=$(printf '%s' "$raw" | python3 -c "import json,sys
+try: print(json.load(sys.stdin).get('visibility',''))
+except Exception: pass" 2>/dev/null)
 case "$pkg" in public|private|internal) ;; *) pkg="" ;; esac
-if [ -z "$pkg" ]; then
+
+if printf '%s' "$raw" | grep -q 'read:packages scope'; then
+  # The default gh token does not carry it, and without it neither the
+  # check below nor the visibility flip can work.
+  need "gh token lacks the packages scope, so visibility cannot be read"
+  warn "gh auth refresh -h github.com -s read:packages,write:packages"
+elif [ -z "$pkg" ]; then
   need "no ghcr.io/$REPO package yet -- it appears after the first build-and-push run"
 elif [ "$pkg" = "public" ]; then
   have "package is public"
@@ -175,6 +183,7 @@ else
   # program.
   need "package is $pkg; make it public or the deploy fails ImagePullBackOff"
   warn "gh api -X PATCH user/packages/container/mcp-cimd -f visibility=public"
+  warn "(needs: gh auth refresh -h github.com -s write:packages)"
   warn "or: Package settings -> Danger Zone -> Change visibility -> Public"
 fi
 

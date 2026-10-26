@@ -98,6 +98,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Without this the job fails inside kubectl, which falls back to
+      # localhost:8080 and reports "failed to download openapi" -- a message
+      # that says nothing about the actual cause.
+      - name: Check deploy secrets are present
+        run: |
+          missing=
+          [ -n "${{ secrets.K8S_NAMESPACE }}" ] || missing="$missing K8S_NAMESPACE"
+          [ -n "${{ secrets.KUBE_CONFIG_B64 }}" ] || missing="$missing KUBE_CONFIG_B64"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repository secret(s):$missing. Run ./infra/k8s/bootstrap.sh --apply"
+            exit 1
+          fi
+
       - name: Install kubectl
         uses: azure/setup-kubectl@v4
 
