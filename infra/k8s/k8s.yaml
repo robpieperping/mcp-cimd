@@ -201,3 +201,13 @@ spec:
                 name: mcp-cimd
                 port:
                   number: 80
+          # Where the authorization response lands. Deliberately ours: the
+          # PF host's /callback performs the token exchange itself and spends
+          # the code with the wrong verifier.
+          - path: /callback
+            pathType: Exact
+            backend:
+              service:
+                name: mcp-cimd
+                port:
+                  number: 80

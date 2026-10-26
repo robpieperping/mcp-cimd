@@ -28,13 +28,21 @@ import type { Request, Response } from "express";
 import { config } from "./config.js";
 
 export const TEST_CLIENT_DOC_PATH = "/mcp-test-client.json";
+export const TEST_CALLBACK_PATH = "/callback";
 
 /**
- * Both URLs are derived rather than written down: the client_id must equal
- * the URL this is served from or PF rejects it, and the redirect must be one
- * PF already accepts. `/callback` on the issuer is a token-display page that
- * is already registered there -- a loopback redirect was refused with
- * "400 Invalid redirect_uri".
+ * Both URLs are derived rather than written down, because the client_id must
+ * equal the URL this is served from or PF rejects the client outright.
+ *
+ * The redirect deliberately points back here rather than at `/callback` on
+ * the PingFederate host. That page looked like a passive token display, but
+ * it performs the token exchange itself, server-side, using a verifier from
+ * a flow it started. Landing our authorization response there made it
+ * redeem our code with the wrong verifier: it failed with
+ * "invalid_grant: the code_verifier sent does not match code_challenge", and
+ * spent the single-use code before anyone could copy it out of the address
+ * bar -- an error that reads as a PKCE bug in our own client and is not one.
+ * Our callback exchanges nothing.
  */
 export function testClientDocument(): Record<string, unknown> {
   const resource = config.auth.resource;
@@ -50,7 +58,7 @@ export function testClientDocument(): Record<string, unknown> {
     client_id: `${origin}${TEST_CLIENT_DOC_PATH}`,
     client_name: "FHIR MCP Phase A Test Client",
     client_uri: "https://github.com/robpieperping/mcp-cimd",
-    redirect_uris: [`${issuer.replace(/\/$/, "")}/callback`],
+    redirect_uris: [`${origin}${TEST_CALLBACK_PATH}`],
     response_types: ["code"],
     grant_types: ["authorization_code", "refresh_token"],
     token_endpoint_auth_method: "none",
@@ -67,4 +75,54 @@ export function serveTestClientDocument(_req: Request, res: Response): void {
     .type("application/json")
     .set("Cache-Control", "public, max-age=60")
     .json(testClientDocument());
+}
+
+/**
+ * The landing page for the authorization response. It renders the query
+ * parameters and does nothing else -- no token exchange, so the code is
+ * still unspent when it reaches `flow.sh token`.
+ */
+export function serveTestCallback(req: Request, res: Response): void {
+  const q = req.query as Record<string, string | undefined>;
+  const row = (k: string) =>
+    q[k] ? `<div class="k">${k}</div><pre>${escapeHtml(q[k]!)}</pre>` : "";
+  const failed = Boolean(q.error);
+  res
+    .status(200)
+    .type("html")
+    .send(
+      `<!doctype html><meta charset="utf-8"><title>Authorization response</title>
+<style>body{font-family:system-ui,sans-serif;max-width:760px;margin:48px auto;
+padding:0 24px;color:#222}h1{font-size:1.3rem;margin-bottom:4px}
+.sub{color:#666;font-size:.9rem;margin-bottom:24px}
+.k{font-size:.75rem;font-weight:600;text-transform:uppercase;color:#888;
+margin:14px 0 4px}pre{margin:0;background:#f7f8fa;border:1px solid #e0e0e0;
+border-radius:6px;padding:12px;white-space:pre-wrap;word-break:break-all;
+font-size:.85rem}.err{color:#c0392b}
+@media(prefers-color-scheme:dark){body{background:#1a1a1a;color:#eee}
+pre{background:#242424;border-color:#3a3a3a}}</style>
+<h1 class="${failed ? "err" : ""}">${
+        failed ? "Authorization failed" : "Authorization response received"
+      }</h1>
+<div class="sub">Nothing was exchanged here. ${
+        failed
+          ? "There is no code to redeem."
+          : "Copy this page's full URL from the address bar and pass it to <code>./flow.sh token</code>."
+      }</div>
+${row("code")}${row("state")}${row("iss")}${row("error")}${row("error_description")}`,
+    );
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(
+    /[&<>"']/g,
+    (c) =>
+      ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;",
+      })[c]!,
+  );
 }

@@ -37,9 +37,32 @@ test("client_id equals the URL it is served from", () => {
   );
 });
 
-test("redirects to a path on the issuer, not a loopback", () => {
-  // http://127.0.0.1:... was refused with 400 Invalid redirect_uri.
-  assert.deepEqual(testClientDocument().redirect_uris, [`${ISSUER}/callback`]);
+test("redirects to our own callback, not the AS's", () => {
+  // The PF host's /callback performs the token exchange itself, server-side,
+  // with a verifier from a flow it started. Pointing our authorization
+  // response there made it spend our single-use code and fail with
+  // "code_verifier does not match code_challenge" -- which reads as a PKCE
+  // bug in this client and is not one. Ours exchanges nothing.
+  assert.deepEqual(testClientDocument().redirect_uris, [
+    "https://mcp-cimd.example.com/callback",
+  ]);
+});
+
+test("the callback does not exchange anything", async () => {
+  const app = buildApp();
+  const server = app.listen(0);
+  await new Promise((r) => server.once("listening", r));
+  try {
+    const res = await fetch(
+      `http://127.0.0.1:${server.address().port}/callback?code=abc123&state=xyz`,
+    );
+    const body = await res.text();
+    assert.equal(res.status, 200);
+    assert.match(body, /abc123/);
+    assert.match(body, /Nothing was exchanged here/);
+  } finally {
+    server.close();
+  }
 });
 
 test("can redeem a code without a secret", () => {

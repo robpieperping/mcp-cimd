@@ -13,7 +13,9 @@ import {
 } from "./mcp-auth.js";
 import { createServer } from "./server.js";
 import {
+  TEST_CALLBACK_PATH,
   TEST_CLIENT_DOC_PATH,
+  serveTestCallback,
   serveTestClientDocument,
 } from "./test-client-doc.js";
 
@@ -75,6 +77,7 @@ export function buildApp(): express.Express {
   // unauthenticated. See src/test-client-doc.ts.
   if (config.serveTestClientDoc) {
     app.get(TEST_CLIENT_DOC_PATH, serveTestClientDocument);
+    app.get(TEST_CALLBACK_PATH, serveTestCallback);
   }
 
   // Before the body parser, deliberately: an unauthenticated caller should
