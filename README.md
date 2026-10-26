@@ -84,7 +84,7 @@ gitignored.
 | --- | --- | --- |
 | `MCP_RESOURCE` | — | Canonical https identifier for this server. Exact-matched against `aud`. No trailing slash. Required when auth is on. |
 | `OAUTH_ISSUER` | — | PingFederate's issuer, exactly as its `openid-configuration` reports it. Required when auth is on. |
-| `OAUTH_JWKS_URI` | `$OAUTH_ISSUER/pf/JWKS` | PingFederate publishes keys there rather than at the RFC-conventional path. |
+| `OAUTH_JWKS_URI` | `$OAUTH_ISSUER/pf/JWKS` | PingFederate publishes keys there rather than at the RFC-conventional path. It is also what PF's own `openid-configuration` reports as `jwks_uri`. |
 | `OAUTH_READ_SCOPE` | `fhir.read` | Required on every request. |
 | `OAUTH_WRITE_SCOPE` | `fhir.write` | Additionally required by the mutating tools. |
 | `OAUTH_SCOPES_SUPPORTED` | the read scope | Advertised in metadata. Every scope listed must be grantable in PF, or linking fails at consent. |

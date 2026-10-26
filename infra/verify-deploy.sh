@@ -11,6 +11,10 @@ set -uo pipefail
 HOST="${MCP_HOST:-mcp-cimd.ping-devops.com}"
 RESOURCE="${MCP_RESOURCE:-https://$HOST/mcp}"
 TOKEN="${1:-${MCP_TOKEN:-}}"
+# The authorization server's discovery document. Defaults to OpenID Connect
+# Discovery on the issuer named in our own metadata, which is what this
+# PingFederate serves; override to point somewhere else.
+OAUTH_METADATA_URL="${OAUTH_METADATA_URL:-}"
 
 for tool in curl openssl python3 dig; do
   command -v "$tool" >/dev/null || { echo "verify-deploy.sh needs $tool on PATH." >&2; exit 2; }
@@ -159,32 +163,56 @@ esac
 
 # ── The authorization server chain ChatGPT walks ─────────────────────────────
 
-if [ -n "$as" ]; then
-  found_metadata=no
-  for path in .well-known/oauth-authorization-server .well-known/openid-configuration; do
-    body=$(curl -sS --max-time 15 "$as/$path" 2>/dev/null)
-    iss=$(printf '%s' "$body" | jqish issuer 2>/dev/null)
-    if [ -n "$iss" ]; then
-      found_metadata=yes
-      # Exact string comparison, per RFC 9207. No normalisation.
-      if [ "$iss" = "$as" ]; then
-        ok "$path issuer matches" "$iss"
-      else
-        no "$path issuer matches" "reports '$iss', we advertise '$as'"
-      fi
-      if printf '%s' "$body" | grep -q '"authorization_response_iss_parameter_supported": *true'; then
-        ok "$path advertises RFC 9207 iss" ""
-      else
-        note "$path RFC 9207 iss" "not advertised; ChatGPT then issues a per-connector client_id"
-      fi
+# Runs when our own metadata named an authorization server, or when
+# OAUTH_METADATA_URL is set explicitly -- so the authorization server can be
+# checked before this server is deployed at all.
+if [ -n "$as" ] || [ -n "$OAUTH_METADATA_URL" ]; then
+  # OpenID Connect Discovery is THE discovery endpoint on this PingFederate:
+  # its RFC 8414 path returns 403, and an MCP client needs only one of the
+  # two. So this one is required and the other is informational.
+  metadata_url="${OAUTH_METADATA_URL:-$as/.well-known/openid-configuration}"
+  # Without our own metadata there is nothing to compare the issuer to, so
+  # derive the expected value from the discovery URL itself.
+  [ -z "$as" ] && as="${metadata_url%/.well-known/*}"
+  body=$(curl -sS --max-time 15 "$metadata_url" 2>/dev/null)
+  iss=$(printf '%s' "$body" | jqish issuer 2>/dev/null)
+
+  if [ -n "$iss" ]; then
+    ok "the AS serves discovery metadata" "$metadata_url"
+    # Exact string comparison, per RFC 9207. No normalisation of scheme
+    # case, default ports, trailing slash or percent-encoding.
+    if [ "$iss" = "$as" ]; then
+      ok "its issuer matches what we advertise" "$iss"
     else
-      note "$path" "not served (one of the two is enough)"
+      # A mismatch here is the mix-up defence failing: the client compares
+      # this against the iss on the authorization response.
+      no "its issuer matches what we advertise" "reports '$iss', we advertise '$as'"
     fi
-  done
-  if [ "$found_metadata" = yes ]; then
-    ok "the AS serves discovery metadata" ""
+    if printf '%s' "$body" | grep -q '"authorization_response_iss_parameter_supported": *true'; then
+      ok "advertises RFC 9207 iss" ""
+    else
+      no "advertises RFC 9207 iss" "without it ChatGPT issues a per-connector client_id instead of the stable one"
+    fi
+    for endpoint in authorization_endpoint token_endpoint jwks_uri; do
+      value=$(printf '%s' "$body" | jqish "$endpoint" 2>/dev/null)
+      if [ -n "$value" ]; then
+        ok "names its $endpoint" "$value"
+      else
+        no "names its $endpoint" "absent from $metadata_url"
+      fi
+    done
   else
-    no "the AS serves discovery metadata" "neither RFC 8414 nor OIDC discovery answered"
+    no "the AS serves discovery metadata" "no issuer in $metadata_url"
+  fi
+
+  # Informational only. MCP clients must support either mechanism, and this
+  # instance serves OIDC discovery, so a 403 here is not a failure.
+  rfc8414=$(curl -sS --max-time 15 -o /dev/null -w '%{http_code}' \
+            "$as/.well-known/oauth-authorization-server" 2>/dev/null)
+  if [ "$rfc8414" = "200" ]; then
+    note "RFC 8414 metadata" "also served"
+  else
+    note "RFC 8414 metadata" "HTTP $rfc8414 -- expected on this instance; OIDC discovery is the one in use"
   fi
 fi
 

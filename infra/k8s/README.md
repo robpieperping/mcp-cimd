@@ -162,6 +162,20 @@ A stale `MCP_RESOURCE` in the Deployment env is the failure worth
 naming: downstream it is a flat 401 with no other clue, so the script
 compares the advertised resource against the host it asked.
 
+The authorization server's discovery document defaults to OpenID Connect
+Discovery on the issuer our metadata names — on this instance
+`https://facile-pastrami-lipogram.ping-devops.com/.well-known/openid-configuration`,
+which is the endpoint in use. PF's RFC 8414 path returns 403, and that
+is fine: an authorization server need only provide one mechanism, and an
+MCP client must support both. Override with `OAUTH_METADATA_URL`, which
+also lets the authorization server be checked before this server is
+deployed at all:
+
+```bash
+OAUTH_METADATA_URL=https://facile-pastrami-lipogram.ping-devops.com/.well-known/openid-configuration \
+  ./infra/verify-deploy.sh
+```
+
 By port-forward, for the endpoints the Ingress does not expose:
 
 ```bash
