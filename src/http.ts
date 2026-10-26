@@ -76,7 +76,9 @@ export function buildApp(): express.Express {
   // Test-only, off by default, and public because PingFederate fetches it
   // unauthenticated. See src/test-client-doc.ts.
   if (config.serveTestClientDoc) {
-    app.get(TEST_CLIENT_DOC_PATH, serveTestClientDocument);
+    // Any /mcp-test-client[-suffix].json; the handler validates the shape
+    // and refuses anything else. The suffix exists to miss PF's cache.
+    app.get(/^\/mcp-test-client(-[a-z0-9]{1,16})?\.json$/, serveTestClientDocument);
     app.get(TEST_CALLBACK_PATH, serveTestCallback);
   }
 

@@ -28,6 +28,23 @@ import type { Request, Response } from "express";
 import { config } from "./config.js";
 
 export const TEST_CLIENT_DOC_PATH = "/mcp-test-client.json";
+
+/**
+ * The document is served at any `/mcp-test-client[-suffix].json`, and its
+ * client_id is whichever of those paths was actually requested.
+ *
+ * That exists to get around PingFederate's metadata cache. PF caches a
+ * client's document and does not honour the `Cache-Control: max-age=60` this
+ * server sends: after the redirect_uri inside the document changed, PF went
+ * on validating against its cached copy and refusing the new redirect for
+ * well over twenty minutes, with no refetch visible in the ingress log. The
+ * cache is keyed by client_id, and a client_id *is* the document URL, so
+ * requesting a suffixed path is a cache miss and PF fetches fresh.
+ *
+ * The pattern is deliberately narrow rather than "serve a document for any
+ * path": this is a public, unauthenticated endpoint.
+ */
+const DOC_PATH = /^\/mcp-test-client(-[a-z0-9]{1,16})?\.json$/;
 export const TEST_CALLBACK_PATH = "/callback";
 
 /**
@@ -44,7 +61,9 @@ export const TEST_CALLBACK_PATH = "/callback";
  * bar -- an error that reads as a PKCE bug in our own client and is not one.
  * Our callback exchanges nothing.
  */
-export function testClientDocument(): Record<string, unknown> {
+export function testClientDocument(
+  docPath: string = TEST_CLIENT_DOC_PATH,
+): Record<string, unknown> {
   const resource = config.auth.resource;
   const issuer = config.auth.issuer;
   if (!resource || !issuer) {
@@ -53,9 +72,12 @@ export function testClientDocument(): Record<string, unknown> {
         "the client_id and redirect_uri.",
     );
   }
+  if (!DOC_PATH.test(docPath)) {
+    throw new Error(`Refusing to mint a client document for ${docPath}.`);
+  }
   const origin = new URL(resource).origin;
   return {
-    client_id: `${origin}${TEST_CLIENT_DOC_PATH}`,
+    client_id: `${origin}${docPath}`,
     client_name: "FHIR MCP Phase A Test Client",
     client_uri: "https://github.com/robpieperping/mcp-cimd",
     redirect_uris: [`${origin}${TEST_CALLBACK_PATH}`],
@@ -67,14 +89,18 @@ export function testClientDocument(): Record<string, unknown> {
   };
 }
 
-export function serveTestClientDocument(_req: Request, res: Response): void {
+export function serveTestClientDocument(req: Request, res: Response): void {
+  if (!DOC_PATH.test(req.path)) {
+    res.status(404).json({ error: "not_found" });
+    return;
+  }
   // PF fetches this, so it must be application/json and must not be cached
   // long enough to outlive an edit during testing.
   res
     .status(200)
     .type("application/json")
     .set("Cache-Control", "public, max-age=60")
-    .json(testClientDocument());
+    .json(testClientDocument(req.path));
 }
 
 /**

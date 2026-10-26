@@ -204,8 +204,12 @@ spec:
                 port:
                   number: 80
           # Test-only, paired with SERVE_TEST_CLIENT_DOC on the Deployment.
-          - path: /mcp-test-client.json
-            pathType: Exact
+          # Prefix, not Exact, so a suffixed path works: PF caches a client
+          # document by client_id and ignores our Cache-Control, so changing
+          # the document means serving it at a new URL to force a refetch.
+          # The handler validates the path shape and 404s anything else.
+          - path: /mcp-test-client
+            pathType: Prefix
             backend:
               service:
                 name: mcp-cimd

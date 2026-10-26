@@ -84,3 +84,39 @@ test("is served as JSON, unauthenticated", async () => {
     server.close();
   }
 });
+
+test("a suffixed path serves a document whose client_id is that path", async () => {
+  // PF caches by client_id, and a client_id IS the document URL, so a
+  // suffixed path is a cache miss. The document must own the URL it is
+  // served from or PF rejects the client outright.
+  const app = buildApp();
+  const server = app.listen(0);
+  await new Promise((r) => server.once("listening", r));
+  try {
+    const res = await fetch(
+      `http://127.0.0.1:${server.address().port}/mcp-test-client-v2.json`,
+    );
+    assert.equal(res.status, 200);
+    const d = await res.json();
+    assert.equal(d.client_id, "https://mcp-cimd.example.com/mcp-test-client-v2.json");
+    assert.equal("scope" in d, false);
+  } finally {
+    server.close();
+  }
+});
+
+test("refuses to mint a document for an unexpected path", async () => {
+  // This endpoint is public and unauthenticated; it should not hand out a
+  // client document for any path a caller invents.
+  const app = buildApp();
+  const server = app.listen(0);
+  await new Promise((r) => server.once("listening", r));
+  try {
+    for (const p of ["/anything.json", "/mcp-test-client-WAYTOOLONGSUFFIXHERE.json"]) {
+      const res = await fetch(`http://127.0.0.1:${server.address().port}${p}`);
+      assert.equal(res.status, 404, `${p} should not be served`);
+    }
+  } finally {
+    server.close();
+  }
+});
