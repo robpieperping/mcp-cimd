@@ -66,7 +66,11 @@ if [ -n "$addr" ]; then
     note "system resolver is stale" "pinned curl to $addr -- negative cache, not a fault"
   fi
 fi
-CURL=(curl -sS "${RESOLVE[@]}")
+# ${RESOLVE[@]+...} rather than "${RESOLVE[@]}": macOS ships bash 3.2, where
+# expanding an empty array under `set -u` is an unbound-variable error. That
+# only bites when DNS is healthy and RESOLVE is therefore empty -- i.e. on
+# every normal run, which is not when this was first written.
+CURL=(curl -sS ${RESOLVE[@]+"${RESOLVE[@]}"})
 
 # The wildcard certificate is the thing most likely to be silently wrong: a
 # host outside *.ping-devops.com gets no cert at all, and ChatGPT will not
